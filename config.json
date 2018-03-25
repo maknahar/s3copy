@@ -1,0 +1,9 @@
+{
+  "s3copyinput": {
+    "region": "us-east-1",
+    "destination": [
+      "s3copyoutput1",
+      "s3copyoutput2"
+    ]
+  }
+}

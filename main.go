@@ -1,26 +1,30 @@
 package main
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
-	"net/http"
-	"os"
-	"sync"
-
-	"encoding/base64"
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-lambda-go/lambda"
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
-	"github.com/aws/aws-sdk-go/service/s3/s3manager"
+	"io/ioutil"
+	"log"
+	"net/http"
+	"os"
 )
 
-func ParseConfig() (config map[string][]string, err error) {
+type Config struct {
+	Region      string   `json:"region"`
+	Destination []string `json:"destination"`
+}
+
+func ParseConfig() (config map[string]Config, err error) {
+	config = make(map[string]Config)
 	data := make([]byte, 0)
 	configURL := os.Getenv("CONFIG_FILE")
-	if configURL == "" {
+	if configURL != "" {
 		// Get the data
 		resp, err := http.Get(configURL)
 		if err != nil {
@@ -43,8 +47,6 @@ func ParseConfig() (config map[string][]string, err error) {
 		return nil, fmt.Errorf("no configuration available")
 	}
 
-	config = make(map[string][]string)
-
 	err = json.Unmarshal(data, &config)
 	if err != nil {
 		return nil, err
@@ -59,38 +61,45 @@ func ProcessIncomingEvents(request events.S3Event) error {
 		return err
 	}
 
-	var wg sync.WaitGroup
+	errChan := make(chan error)
 	for _, v := range request.Records {
-		region, err := s3manager.GetBucketRegion(nil, session.Must(session.NewSession()), v.S3.Bucket.Name, "ap-southeast-1")
+		log.Println("Moving", v.S3.Bucket.Name, v.S3.Object.Key, "To", config[v.S3.Bucket.Name].Destination)
+		sess, err := session.NewSession(&aws.Config{Region: aws.String(config[v.S3.Bucket.Name].Region)})
 		if err != nil {
-			return err
+			return fmt.Errorf("unable to enstablish aws session for %v", config[v.S3.Bucket.Name])
 		}
-
-		sess, err := session.NewSession(&aws.Config{Region: aws.String(region)})
-		for _, v1 := range config[v.S3.Bucket.Name] {
-			wg.Add(1)
-			go copyObjects(&wg, s3.New(sess), v.S3.Bucket.Name, v1, v.S3.Object.Key)
+		for _, v1 := range config[v.S3.Bucket.Name].Destination {
+			go copyObjects(s3.New(sess), v.S3.Bucket.Name, v1, v.S3.Object.Key, errChan)
 		}
 	}
-	wg.Wait()
+
+	for _, v := range request.Records {
+		for range config[v.S3.Bucket.Name].Destination {
+			err = <-errChan
+			if err != nil {
+				return err
+			}
+		}
+	}
+
 	return nil
 }
 
-func copyObjects(wg *sync.WaitGroup, svc *s3.S3, from, to, item string) error {
-	defer wg.Done()
+func copyObjects(svc *s3.S3, from, to, item string, errChan chan error) {
 	_, err := svc.CopyObject(&s3.CopyObjectInput{Bucket: aws.String(to), CopySource: aws.String(from + "/" + item),
 		Key: aws.String(item)})
 	if err != nil {
-		return fmt.Errorf("unable to copy item %s from bucket %q to bucket %q, %v", item, from, to, err)
+		errChan <- fmt.Errorf("unable to copy item %s from bucket %q to bucket %q, %v", item, from, to, err)
+		return
 	}
 
 	err = svc.WaitUntilObjectExists(&s3.HeadObjectInput{Bucket: aws.String(to), Key: aws.String(item)})
 	if err != nil {
-		return fmt.Errorf("error occurred while waiting for item %q to be copied to bucket %q, %v",
+		errChan <- fmt.Errorf("error occurred while waiting for item %q to be copied to bucket %q, %v",
 			item, to, err)
+		return
 	}
-
-	return nil
+	errChan <- nil
 }
 
 func main() {
