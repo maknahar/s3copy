@@ -34,7 +34,7 @@ S3 trigger to Lambda.
     "region": "us-east-1",
     "sqs": "url of SQS where all S3 change events are stored",
     "sqsRegion": "us-east-1"
-    "destination": [
+    "destinations": [
       "s3copyoutput1",
       "s3copyoutput2"
     ]
@@ -54,9 +54,9 @@ CONFIG_FILE : URL of configuration file
 
 CONFIG : Base64 Encoded string of content of CONFIG_FILE
 
-### NOTE:
+## NOTE:
 Make sure Lambda function have required access to source 
 and destination bucket. 
 
-### Contribution
+## Contribution
 All contributions are welcome. Either via PR or Issue.

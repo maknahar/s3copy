@@ -17,13 +17,14 @@ import (
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/aws/aws-sdk-go/service/sqs"
+	"reflect"
 )
 
 type Config struct {
-	Region      string   `json:"region"`
-	SQS         string   `json:"sqs"`
-	SQSRegion   string   `json:"sqsRegion"`
-	Destination []string `json:"destination"`
+	Region       string   `json:"region"`
+	SQS          string   `json:"sqs"`
+	SQSRegion    string   `json:"sqsRegion"`
+	Destinations []string `json:"destinations"`
 }
 
 func parseConfig() (config map[string]Config, err error) {
@@ -63,18 +64,18 @@ func parseConfig() (config map[string]Config, err error) {
 func processS3Trigger(config map[string]Config, request events.S3Event) (err error) {
 	errChan := make(chan error)
 	for _, v := range request.Records {
-		log.Println("Moving", v.S3.Bucket.Name, v.S3.Object.Key, "To", config[v.S3.Bucket.Name].Destination)
+		log.Println("Moving", v.S3.Bucket.Name, v.S3.Object.Key, "To", config[v.S3.Bucket.Name].Destinations)
 		sess, err := session.NewSession(&aws.Config{Region: aws.String(config[v.S3.Bucket.Name].Region)})
 		if err != nil {
 			return fmt.Errorf("unable to enstablish aws session for %v", config[v.S3.Bucket.Name])
 		}
-		for _, v1 := range config[v.S3.Bucket.Name].Destination {
+		for _, v1 := range config[v.S3.Bucket.Name].Destinations {
 			go copyObjects(s3.New(sess), v.S3.Bucket.Name, v1, v.S3.Object.Key, errChan)
 		}
 	}
 
 	for _, v := range request.Records {
-		for range config[v.S3.Bucket.Name].Destination {
+		for range config[v.S3.Bucket.Name].Destinations {
 			err = <-errChan
 			if err != nil {
 				return err
@@ -159,14 +160,21 @@ func DeleteMessageFromSQS(svc *sqs.SQS, message *sqs.Message, QueueURL string) e
 func ProcessIncomingEvents(event interface{}) error {
 	config, err := parseConfig()
 	if err != nil {
-		return err
+		return fmt.Errorf("error in parsing the config %v", err)
 	}
 
 	switch request := event.(type) {
 	case events.S3Event:
+		log.Println("Got S3 Event")
 		return processS3Trigger(config, request)
+
 	case types.Nil:
+		log.Println("Defaulting to SQS")
 		return processSQSMessage(config)
+
+	default:
+		log.Println("Could not find the event type", reflect.TypeOf(request))
+
 	}
 
 	return nil
