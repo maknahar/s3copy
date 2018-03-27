@@ -17,6 +17,8 @@ import (
 
 type Config struct {
 	Region      string   `json:"region"`
+	SQS         string   `json:"sqs"`
+	SQSRegion   string   `json:"sqsRegion"`
 	Destination []string `json:"destination"`
 }
 
