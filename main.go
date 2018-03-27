@@ -169,8 +169,6 @@ func ProcessIncomingEvents(event interface{}) error {
 		return processS3Trigger(config, s3Event)
 	}
 
-	log.Println("S3 Event", len(s3Event.Records), s3Event.Records[0].S3.Object.Key, s3Event)
-
 	log.Println("Defaulting to SQS")
 	return processSQSMessage(config)
 
