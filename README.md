@@ -26,12 +26,12 @@ destination buckets in a JSON file.
 Config File is a map of input s3 bucket and detail to copy 
 changes to destination.
 
-Function can take event from SQS as well if you have the 
-source bucket put all event to a SQS.
+The function can take events from an SQS as well if 
+source bucket put all event to an SQS.
 
-Function can take event from SQS where SQS is subscribe to
-a SNS and source bucket publish a message to SNS on every 
-change.
+The function can take events from an SQS where SQS is 
+subscribed to an SNS and source bucket publish a message 
+to an SNS on every change.
 
 To Support SQS processing add SQS URL `sqs` and
 SQS region `sqsRegion` in the config file. Otherwise,
