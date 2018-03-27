@@ -85,8 +85,9 @@ func processS3Trigger(config map[string]Config, request events.S3Event) (err err
 }
 
 func processSQSMessage(config map[string]Config) (err error) {
-	for _, v := range config {
+	for k, v := range config {
 		if v.SQS == "" {
+			log.Println("No SQS found for", k)
 			continue
 		}
 		s := sqs.New(session.Must(session.NewSession()), aws.NewConfig().WithRegion(v.SQSRegion))
@@ -127,8 +128,11 @@ func processSQSEvent(wg *sync.WaitGroup, s *sqs.SQS, receiveResp *sqs.ReceiveMes
 
 		var s3Event events.S3Event
 		if err := json.Unmarshal([]byte(snsMessages.Message), &s3Event); err != nil {
-			log.Printf("error while unmarshaling SQS json %v", err)
-			continue
+			//Support message coming directly to SQS from S3
+			if err = json.Unmarshal([]byte(*message.Body), &s3Event); err != nil {
+				log.Printf("error while unmarshaling SQS json %v %v", err, *message.Body)
+				continue
+			}
 		}
 
 		if err := processS3Trigger(config, s3Event); err != nil {
