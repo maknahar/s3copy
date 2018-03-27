@@ -4,7 +4,6 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"go/types"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -17,7 +16,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/aws/aws-sdk-go/service/sqs"
-	"reflect"
+	"github.com/mitchellh/mapstructure"
 )
 
 type Config struct {
@@ -94,7 +93,7 @@ func processSQSMessage(config map[string]Config) (err error) {
 		var wg sync.WaitGroup
 		for {
 			r, err := s.ReceiveMessage(&sqs.ReceiveMessageInput{
-				QueueUrl:            aws.String(v.SQSRegion),
+				QueueUrl:            aws.String(v.SQS),
 				MaxNumberOfMessages: aws.Int64(int64(10)),
 			})
 
@@ -105,6 +104,7 @@ func processSQSMessage(config map[string]Config) (err error) {
 			if len(r.Messages) == 0 {
 				break
 			}
+
 			wg.Add(1)
 			go processSQSEvent(&wg, s, r, v.SQS, config)
 		}
@@ -163,21 +163,17 @@ func ProcessIncomingEvents(event interface{}) error {
 		return fmt.Errorf("error in parsing the config %v", err)
 	}
 
-	switch request := event.(type) {
-	case events.S3Event:
+	e, s3Event := event.(map[string]interface{}), events.S3Event{}
+	if mapstructure.Decode(e, &s3Event); len(s3Event.Records) > 0 && s3Event.Records[0].S3.Object.Key != "" {
 		log.Println("Got S3 Event")
-		return processS3Trigger(config, request)
-
-	case types.Nil:
-		log.Println("Defaulting to SQS")
-		return processSQSMessage(config)
-
-	default:
-		log.Println("Could not find the event type", reflect.TypeOf(request))
-
+		return processS3Trigger(config, s3Event)
 	}
 
-	return nil
+	log.Println("S3 Event", len(s3Event.Records), s3Event.Records[0].S3.Object.Key, s3Event)
+
+	log.Println("Defaulting to SQS")
+	return processSQSMessage(config)
+
 }
 
 func copyObjects(svc *s3.S3, from, to, item string, errChan chan error) {
