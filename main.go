@@ -4,15 +4,19 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"go/types"
+	"io/ioutil"
+	"log"
+	"net/http"
+	"os"
+	"sync"
+
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-lambda-go/lambda"
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
-	"io/ioutil"
-	"log"
-	"net/http"
-	"os"
+	"github.com/aws/aws-sdk-go/service/sqs"
 )
 
 type Config struct {
@@ -22,12 +26,11 @@ type Config struct {
 	Destination []string `json:"destination"`
 }
 
-func ParseConfig() (config map[string]Config, err error) {
+func parseConfig() (config map[string]Config, err error) {
 	config = make(map[string]Config)
 	data := make([]byte, 0)
 	configURL := os.Getenv("CONFIG_FILE")
 	if configURL != "" {
-		// Get the data
 		resp, err := http.Get(configURL)
 		if err != nil {
 			return nil, err
@@ -57,12 +60,7 @@ func ParseConfig() (config map[string]Config, err error) {
 	return config, nil
 }
 
-func ProcessIncomingEvents(request events.S3Event) error {
-	config, err := ParseConfig()
-	if err != nil {
-		return err
-	}
-
+func processS3Trigger(config map[string]Config, request events.S3Event) (err error) {
 	errChan := make(chan error)
 	for _, v := range request.Records {
 		log.Println("Moving", v.S3.Bucket.Name, v.S3.Object.Key, "To", config[v.S3.Bucket.Name].Destination)
@@ -82,6 +80,93 @@ func ProcessIncomingEvents(request events.S3Event) error {
 				return err
 			}
 		}
+	}
+	return nil
+}
+
+func processSQSMessage(config map[string]Config) (err error) {
+	for _, v := range config {
+		if v.SQS == "" {
+			continue
+		}
+		s := sqs.New(session.Must(session.NewSession()), aws.NewConfig().WithRegion(v.SQSRegion))
+		var wg sync.WaitGroup
+		for {
+			r, err := s.ReceiveMessage(&sqs.ReceiveMessageInput{
+				QueueUrl:            aws.String(v.SQSRegion),
+				MaxNumberOfMessages: aws.Int64(int64(10)),
+			})
+
+			if err != nil {
+				return fmt.Errorf("error while reading from SQS: %v", err)
+			}
+
+			if len(r.Messages) == 0 {
+				break
+			}
+			wg.Add(1)
+			go processSQSEvent(&wg, s, r, v.SQS, config)
+		}
+		wg.Wait()
+	}
+
+	return nil
+}
+
+func processSQSEvent(wg *sync.WaitGroup, s *sqs.SQS, receiveResp *sqs.ReceiveMessageOutput, sqsUrl string,
+	config map[string]Config) {
+	defer wg.Done()
+
+	for _, message := range receiveResp.Messages {
+		var snsMessages events.SNSEntity
+		if err := json.Unmarshal([]byte(*message.Body), &snsMessages); err != nil {
+			log.Printf("error while unmarshaling SNS json %v %v", err, *message.Body)
+			continue
+		}
+
+		var s3Event events.S3Event
+		if err := json.Unmarshal([]byte(snsMessages.Message), &s3Event); err != nil {
+			log.Printf("error while unmarshaling SQS json %v", err)
+			continue
+		}
+
+		if err := processS3Trigger(config, s3Event); err != nil {
+			log.Printf("error while processing s3 event via SQD %v", err)
+			continue
+		}
+
+		// Delete message
+		if err := DeleteMessageFromSQS(s, message, sqsUrl); err != nil {
+			log.Println("error occured during deleting message from SQS. ", err, message)
+		}
+
+	}
+}
+
+func DeleteMessageFromSQS(svc *sqs.SQS, message *sqs.Message, QueueURL string) error {
+	deleteParams := &sqs.DeleteMessageInput{
+		QueueUrl:      aws.String(QueueURL),  // Required
+		ReceiptHandle: message.ReceiptHandle, // Required
+	}
+	_, err := svc.DeleteMessage(deleteParams)
+	if err != nil {
+		return err
+	}
+
+	return err
+}
+
+func ProcessIncomingEvents(event interface{}) error {
+	config, err := parseConfig()
+	if err != nil {
+		return err
+	}
+
+	switch request := event.(type) {
+	case events.S3Event:
+		return processS3Trigger(config, request)
+	case types.Nil:
+		return processSQSMessage(config)
 	}
 
 	return nil
