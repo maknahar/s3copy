@@ -1,11 +1,11 @@
-# copys3
-A lambda function to copy objects from n buckets
- to m buckets in same region.
+# s3copy
+A lambda function to copy objects from n to m S3 Buckets
+ where n, m >= 1
  
  
 ## Deployment
 - Download the deployment guide from 
-https://github.com/maknahar/copys3/releases
+https://github.com/maknahar/s3copy/releases
 - Upload the deployment file to lambda
 - Set the configuration
 
@@ -55,13 +55,14 @@ Leave them empty `""` or remove the keys.
 This Lambda function can be configured in two ways. 
 - Either give a public url of config file via CONFIG_FILE
 - or provide base64 encoded value of configuration via 
-CONFIG.
+CONFIG. You can online tools like www.base64encode.org
+to encode config content.
 
 If both are provided CONFIG_FILE value will take precedence.
 
-CONFIG_FILE : URL of configuration file
+- CONFIG_FILE : URL of configuration file
 
-CONFIG : Base64 Encoded string of content of CONFIG_FILE
+- CONFIG : Base64 Encoded string of content of CONFIG_FILE
 
 ## NOTE:
 Make sure Lambda function have required access to source 
