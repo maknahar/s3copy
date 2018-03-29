@@ -51,6 +51,10 @@ Leave them empty `""` or remove the keys.
 }
 ```
 
+With above configuration, any object put in `s3copyinput` 
+will be copied to `s3copyoutput1` and `s3copyoutput2` by
+this Lambda function.
+
 ### Env Var
 This Lambda function can be configured in two ways. 
 - Either give a public url of config file via CONFIG_FILE
