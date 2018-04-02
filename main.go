@@ -141,14 +141,14 @@ func processSQSEvent(wg *sync.WaitGroup, s *sqs.SQS, receiveResp *sqs.ReceiveMes
 		}
 
 		// Delete message
-		if err := DeleteMessageFromSQS(s, message, sqsUrl); err != nil {
+		if err := deleteMessageFromSQS(s, message, sqsUrl); err != nil {
 			log.Println("error occured during deleting message from SQS. ", err, message)
 		}
 
 	}
 }
 
-func DeleteMessageFromSQS(svc *sqs.SQS, message *sqs.Message, QueueURL string) error {
+func deleteMessageFromSQS(svc *sqs.SQS, message *sqs.Message, QueueURL string) error {
 	deleteParams := &sqs.DeleteMessageInput{
 		QueueUrl:      aws.String(QueueURL),  // Required
 		ReceiptHandle: message.ReceiptHandle, // Required

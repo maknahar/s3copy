@@ -39,21 +39,32 @@ Leave them empty `""` or remove the keys.
 
 ```
 {
-  "s3copyinput": {
+  "source-bucket": {
     "region": "us-east-1",
-    "sqs": "url of SQS where all S3 change events are stored",
+    "sqs": "URL of SQS where all S3 change events are stored",
     "sqsRegion": "us-east-1"
     "destinations": [
-      "s3copyoutput1",
-      "s3copyoutput2"
+      "output-bucket-1",
+      "output-bucket-2"
+    ]
+  },
+  "another-source-bucket": {
+    "region": "us-east-1",
+    "sqs": "SQS URL",
+    "sqsRegion": "us-east-1"
+    "destinations": [
+      "output-bucket-1",
+      "output-bucket-3"
     ]
   }
 }
 ```
 
-With above configuration, any object put in `s3copyinput` 
-will be copied to `s3copyoutput1` and `s3copyoutput2` by
-this Lambda function.
+With above configuration, any object put in `source-bucket` 
+will be copied to `output-bucket-1` & `output-bucket-2`
+and any object put in `another-source-bucket` will be 
+copied to `output-bucket-1` & `output-bucket-3`.
+
 
 ### Env Var
 This Lambda function can be configured in two ways. 
