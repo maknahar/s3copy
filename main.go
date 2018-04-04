@@ -26,10 +26,10 @@ type Config struct {
 	Destinations []string `json:"destinations"`
 }
 
-var config map[string]*Config
+var config map[string]Config
 
 func parseConfig() (err error) {
-	config = make(map[string]*Config)
+	config = make(map[string]Config)
 	data := make([]byte, 0)
 	configURL := os.Getenv("CONFIG_FILE")
 	if configURL != "" {
@@ -80,7 +80,7 @@ func detectCycle(conf []string, cycle string, visitedMap map[string]bool) {
 			log.Fatal("Cyclic copy found: " + branch)
 		} else {
 			visitedMap[d] = true
-			if config[d] != nil {
+			if len(config[d].Destinations) != 0 {
 				detectCycle(config[d].Destinations, branch, visitedMap)
 			}
 		}
