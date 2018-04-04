@@ -17,3 +17,4 @@ copys3
 *.env
 deployment.zip
 main
+config.json

@@ -75,13 +75,13 @@ func PanicIfCopyCycleFound() {
 
 func detectCycle(conf []string, cycle string, visitedMap map[string]bool) {
 	for _, d := range conf {
-		cycle += " -> " + d
+		branch := cycle + " -> " + d
 		if visitedMap[d] {
-			panic("Copy Cycle found: " + cycle)
+			log.Fatal("Cyclic copy found: " + branch)
 		} else {
 			visitedMap[d] = true
 			if config[d] != nil {
-				detectCycle(config[d].Destinations, cycle, visitedMap)
+				detectCycle(config[d].Destinations, branch, visitedMap)
 			}
 		}
 	}

@@ -46,28 +46,28 @@ Leave them empty `""` or remove the keys.
   "source-bucket": {
     "region": "us-east-1",
     "sqs": "URL of SQS where all S3 change events are stored",
-    "sqsRegion": "us-east-1"
+    "sqsRegion": "us-east-1",
     "destinations": [
-      "output-bucket-1",
-      "output-bucket-2"
+      "destination-bucket-1",
+      "destination-bucket-2"
     ]
   },
   "another-source-bucket": {
     "region": "us-east-1",
     "sqs": "SQS URL",
-    "sqsRegion": "us-east-1"
+    "sqsRegion": "us-east-1",
     "destinations": [
-      "output-bucket-1",
-      "output-bucket-3"
+      "destination-bucket-1",
+      "destination-bucket-3"
     ]
   }
 }
 ```
 
 With above configuration, any object put in `source-bucket` 
-will be copied to `output-bucket-1` & `output-bucket-2`
+will be copied to `destination-bucket-1` & `destination-bucket-2`
 and any object put in `another-source-bucket` will be 
-copied to `output-bucket-1` & `output-bucket-3`.
+copied to `destination-bucket-1` & `destination-bucket-3`.
 
 
 ### Env Var
