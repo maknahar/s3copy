@@ -162,7 +162,7 @@ func processSQSEvent(wg *sync.WaitGroup, s *sqs.SQS, receiveResp *sqs.ReceiveMes
 		}
 
 		if err := processS3Trigger(s3Event); err != nil {
-			log.Printf("error while processing s3 event via SQD %v", err)
+			log.Printf("error while processing s3 event via SQS %v", err)
 			continue
 		}
 
