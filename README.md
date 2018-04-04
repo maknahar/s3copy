@@ -4,17 +4,21 @@ A lambda function to copy objects from n to m S3 Buckets
  
  
 ## Deployment
-- Download the deployment guide from 
+- Download the deployment file from 
 https://github.com/maknahar/s3copy/releases
 - Upload the deployment file to lambda
 - Set the configuration
 
 or
 
-- Checkout the latest release code `go get github.com/maknahar/copys3`
-- Build the deployment file `GOOS=linux go build -o main main.go && zip deployment.zip main`
+- Checkout the latest release code 
+`go get github.com/maknahar/copys3`
+- Build and generate the deployment file 
+`GOOS=linux go build -o main main.go && zip deployment.zip main`
 - Upload the deployment file to lambda
 - Set the configuration 
+
+**Handler function name:** `main`
 
 ## Config
 This Lambda Function expect the list of source and 
