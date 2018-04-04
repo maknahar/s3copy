@@ -26,41 +26,68 @@ type Config struct {
 	Destinations []string `json:"destinations"`
 }
 
-func parseConfig() (config map[string]Config, err error) {
-	config = make(map[string]Config)
+var config map[string]*Config
+
+func parseConfig() (err error) {
+	config = make(map[string]*Config)
 	data := make([]byte, 0)
 	configURL := os.Getenv("CONFIG_FILE")
 	if configURL != "" {
 		resp, err := http.Get(configURL)
 		if err != nil {
-			return nil, err
+			return err
 		}
 		defer resp.Body.Close()
 
 		data, err = ioutil.ReadAll(resp.Body)
 		if err != nil {
-			return nil, err
+			return err
 		}
 	} else {
 		data, err = base64.StdEncoding.DecodeString(os.Getenv("CONFIG"))
 		if err != nil {
-			return nil, err
+			return err
 		}
 	}
 
 	if len(data) == 0 {
-		return nil, fmt.Errorf("no configuration available")
+		return fmt.Errorf("no configuration available")
 	}
 
 	err = json.Unmarshal(data, &config)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	return config, nil
+	PanicIfCopyCycleFound()
+
+	return nil
 }
 
-func processS3Trigger(config map[string]Config, request events.S3Event) (err error) {
+func PanicIfCopyCycleFound() {
+	for k, v := range config {
+		visitedMap := make(map[string]bool)
+		visitedMap[k] = true
+		cycle := k
+		detectCycle(v.Destinations, cycle, visitedMap)
+	}
+}
+
+func detectCycle(conf []string, cycle string, visitedMap map[string]bool) {
+	for _, d := range conf {
+		cycle += " -> " + d
+		if visitedMap[d] {
+			panic("Copy Cycle found: " + cycle)
+		} else {
+			visitedMap[d] = true
+			if config[d] != nil {
+				detectCycle(config[d].Destinations, cycle, visitedMap)
+			}
+		}
+	}
+}
+
+func processS3Trigger(request events.S3Event) (err error) {
 	errChan := make(chan error)
 	for _, v := range request.Records {
 		log.Println("Moving", v.S3.Bucket.Name, v.S3.Object.Key, "To", config[v.S3.Bucket.Name].Destinations)
@@ -84,7 +111,7 @@ func processS3Trigger(config map[string]Config, request events.S3Event) (err err
 	return nil
 }
 
-func processSQSMessage(config map[string]Config) (err error) {
+func processSQSMessage() (err error) {
 	for k, v := range config {
 		if v.SQS == "" {
 			log.Println("No SQS found for", k)
@@ -107,7 +134,7 @@ func processSQSMessage(config map[string]Config) (err error) {
 			}
 
 			wg.Add(1)
-			go processSQSEvent(&wg, s, r, v.SQS, config)
+			go processSQSEvent(&wg, s, r, v.SQS)
 		}
 		wg.Wait()
 	}
@@ -115,8 +142,7 @@ func processSQSMessage(config map[string]Config) (err error) {
 	return nil
 }
 
-func processSQSEvent(wg *sync.WaitGroup, s *sqs.SQS, receiveResp *sqs.ReceiveMessageOutput, sqsUrl string,
-	config map[string]Config) {
+func processSQSEvent(wg *sync.WaitGroup, s *sqs.SQS, receiveResp *sqs.ReceiveMessageOutput, sqsUrl string) {
 	defer wg.Done()
 
 	for _, message := range receiveResp.Messages {
@@ -135,7 +161,7 @@ func processSQSEvent(wg *sync.WaitGroup, s *sqs.SQS, receiveResp *sqs.ReceiveMes
 			}
 		}
 
-		if err := processS3Trigger(config, s3Event); err != nil {
+		if err := processS3Trigger(s3Event); err != nil {
 			log.Printf("error while processing s3 event via SQD %v", err)
 			continue
 		}
@@ -162,24 +188,24 @@ func deleteMessageFromSQS(svc *sqs.SQS, message *sqs.Message, QueueURL string) e
 }
 
 func ProcessIncomingEvents(event interface{}) error {
-	config, err := parseConfig()
+	err := parseConfig()
 	if err != nil {
 		return fmt.Errorf("error in parsing the config %v", err)
 	}
 
 	e, s3Event := event.(map[string]interface{}), events.S3Event{}
-	err = mapstructure.Decode(e, s3Event)
+	err = mapstructure.Decode(e, &s3Event)
 	if err != nil {
 		return err
 	}
 
 	if mapstructure.Decode(e, &s3Event); len(s3Event.Records) > 0 && s3Event.Records[0].S3.Object.Key != "" {
 		log.Println("Got S3 Event")
-		return processS3Trigger(config, s3Event)
+		return processS3Trigger(s3Event)
 	}
 
 	log.Println("Defaulting to SQS")
-	return processSQSMessage(config)
+	return processSQSMessage()
 
 }
 
