@@ -1,3 +1,6 @@
+// This is a lambda function to support objects duplication among AWS S3 buckets
+// Configuration can support many to many duplication. However, this function checks and prevent
+// the cyclic duplication based on the configuration
 package main
 
 import (
@@ -19,6 +22,7 @@ import (
 	"github.com/mitchellh/mapstructure"
 )
 
+// Config Describe the structure of configuration for one source bucket
 type Config struct {
 	Region       string   `json:"region"`
 	SQS          string   `json:"sqs"`
@@ -64,6 +68,7 @@ func parseConfig() (err error) {
 	return nil
 }
 
+// PanicIfCopyCycleFound detect the cyclic duplication in configuration and panic if any such instance is found
 func PanicIfCopyCycleFound() {
 	for k, v := range config {
 		visitedMap := make(map[string]bool)
@@ -142,7 +147,7 @@ func processSQSMessage() (err error) {
 	return nil
 }
 
-func processSQSEvent(wg *sync.WaitGroup, s *sqs.SQS, receiveResp *sqs.ReceiveMessageOutput, sqsUrl string) {
+func processSQSEvent(wg *sync.WaitGroup, s *sqs.SQS, receiveResp *sqs.ReceiveMessageOutput, sqsURL string) {
 	defer wg.Done()
 
 	for _, message := range receiveResp.Messages {
@@ -167,7 +172,7 @@ func processSQSEvent(wg *sync.WaitGroup, s *sqs.SQS, receiveResp *sqs.ReceiveMes
 		}
 
 		// Delete message
-		if err := deleteMessageFromSQS(s, message, sqsUrl); err != nil {
+		if err := deleteMessageFromSQS(s, message, sqsURL); err != nil {
 			log.Println("error occured during deleting message from SQS. ", err, message)
 		}
 
@@ -187,6 +192,11 @@ func deleteMessageFromSQS(svc *sqs.SQS, message *sqs.Message, QueueURL string) e
 	return err
 }
 
+// ProcessIncomingEvents Handles an individual S3 event
+// S3 events could be received in following way
+// - Trigger Lambda function directly from S3 event
+// - Trigger Lambda function from SNS which receive the notification on every S3 event
+// - Trigger Lambda function from CloudWatch periodically and provide a SQS in config which will to be checked on invocation
 func ProcessIncomingEvents(event interface{}) error {
 	err := parseConfig()
 	if err != nil {
