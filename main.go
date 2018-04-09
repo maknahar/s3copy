@@ -204,10 +204,6 @@ func ProcessIncomingEvents(event interface{}) error {
 	}
 
 	e, s3Event := event.(map[string]interface{}), events.S3Event{}
-	err = mapstructure.Decode(e, &s3Event)
-	if err != nil {
-		return err
-	}
 
 	if mapstructure.Decode(e, &s3Event); len(s3Event.Records) > 0 && s3Event.Records[0].S3.Object.Key != "" {
 		log.Println("Got S3 Event")
