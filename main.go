@@ -92,7 +92,7 @@ func detectCycle(conf []string, cycle string, visitedMap map[string]bool) {
 	}
 }
 
-func processS3Trigger(request events.S3Event) (err error) {
+func processS3Event(request events.S3Event) (err error) {
 	errChan := make(chan error)
 	for _, v := range request.Records {
 		log.Println("Moving", v.S3.Bucket.Name, v.S3.Object.Key, "To", config[v.S3.Bucket.Name].Destinations)
@@ -166,7 +166,7 @@ func processSQSEvent(wg *sync.WaitGroup, s *sqs.SQS, receiveResp *sqs.ReceiveMes
 			}
 		}
 
-		if err := processS3Trigger(s3Event); err != nil {
+		if err := processS3Event(s3Event); err != nil {
 			log.Printf("error while processing s3 event via SQS %v", err)
 			continue
 		}
@@ -177,6 +177,20 @@ func processSQSEvent(wg *sync.WaitGroup, s *sqs.SQS, receiveResp *sqs.ReceiveMes
 		}
 
 	}
+}
+
+func processSNSEvent(receiveResp *events.SNSEvent) error {
+	for _, message := range receiveResp.Records {
+		var s3Event events.S3Event
+		if err := json.Unmarshal([]byte(message.SNS.Message), &s3Event); err != nil {
+			return fmt.Errorf("error while unmarshaling SNS event %v %v", err, message.SNS.Message)
+		}
+
+		if err := processS3Event(s3Event); err != nil {
+			return fmt.Errorf("error while processing s3 event via SNS %v", err)
+		}
+	}
+	return nil
 }
 
 func deleteMessageFromSQS(svc *sqs.SQS, message *sqs.Message, QueueURL string) error {
@@ -207,12 +221,17 @@ func ProcessIncomingEvents(event interface{}) error {
 
 	if mapstructure.Decode(e, &s3Event); len(s3Event.Records) > 0 && s3Event.Records[0].S3.Object.Key != "" {
 		log.Println("Got S3 Event")
-		return processS3Trigger(s3Event)
+		return processS3Event(s3Event)
+	}
+
+	snsEvent := events.SNSEvent{}
+	if mapstructure.Decode(e, &snsEvent); len(snsEvent.Records) > 0 && snsEvent.Records[0].SNS.MessageID != "" {
+		log.Println("Got S3 Event")
+		return processSNSEvent(&snsEvent)
 	}
 
 	log.Println("Defaulting to SQS")
 	return processSQSMessage()
-
 }
 
 func copyObjects(svc *s3.S3, from, to, item string, errChan chan error) {
